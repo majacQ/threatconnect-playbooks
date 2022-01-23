@@ -8,7 +8,7 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <threatconnect-sdk.version>2.9.3</threatconnect-sdk.version>
+        <threatconnect-sdk.version>2.12.1</threatconnect-sdk.version>
     </properties>
 
     <dependencies>
