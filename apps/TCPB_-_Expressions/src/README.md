@@ -2,6 +2,21 @@
 
 # Release Notes
 
+### 1.0.10 (2021-09-23)
+
+* add URL method
+* add StringArray outputs on the *Many forms
+* add partitionedmerge function
+* add round function
+* fix encapsulation/deencapsulation of top level "naked" TC variables which are structures like TCEntities (allow passthrough of entity)
+
+### 1.0.9 (2021-08-20)
+
+* add dict function
+* add report function
+* add Trace subexpression advanced option
+* fix encapsulation/deencapsulation of embedded TC variables
+
 ### 1.0.8 (2021-05-24)
 
 * Add uuid3, uuid4, uuid5, xmlread, xmlwrite
@@ -122,6 +137,9 @@ A direct evaluation of an expression with either single or multiple results.
   When an expression fails to evaluate, assign it the value None, and continue
   execution.
 
+  **Trace subexpression execution** *(Boolean, Default: Unselected)*
+  Trace execution of subexpresssions at DEBUG level in the application's log.
+
 ### Outputs
 
   - expression.expression *(String)*
@@ -150,6 +168,10 @@ Perform multiple evaluations, one set to define variables, another to define out
   > **Allows:** String, StringArray, Binary, BinaryArray, KeyValue, KeyValueArray, TCEntity, TCEntityArray, TCEnhancedEntity, TCEnhancedEntityArray
 
 ### *Advanced*
+
+  _**StringArray Outputs**_ *(KeyValueList, Optional)*
+  Outputs to be delivered as StringArray
+  > **Allows:** String, StringArray, Binary, BinaryArray, KeyValue, KeyValueArray, TCEntity, TCEntityArray, TCEnhancedEntity
 
   _**Binary Outputs**_ *(KeyValueList, Optional)*
   Outputs to be delivered as Binary
@@ -183,6 +205,9 @@ Perform multiple evaluations, one set to define variables, another to define out
   When an expression fails to evaluate, assign it the value None, and continue
   execution.
 
+  **Trace subexpression execution** *(Boolean, Default: Unselected)*
+  Trace execution of subexpresssions at DEBUG level in the application's log.
+
 ### Outputs
 
   - expression.action *(String)*
@@ -214,6 +239,9 @@ Loop evaluation of the same expression while looping over the inputs. Inputs wit
   **Return None on failure** *(Boolean, Default: Selected)*
   When an expression fails to evaluate, assign it the value None, and continue
   execution.
+
+  **Trace subexpression execution** *(Boolean, Default: Unselected)*
+  Trace execution of subexpresssions at DEBUG level in the application's log.
 
 ### Outputs
 
@@ -261,6 +289,10 @@ nested outputs.  Tuple outputs will create nested outputs.
 
 ### *Advanced*
 
+  _**StringArray Outputs**_ *(KeyValueList, Optional)*
+  Outputs to be delivered as StringArray
+  > **Allows:** String, StringArray, Binary, BinaryArray, KeyValue, KeyValueArray, TCEntity, TCEntityArray, TCEnhancedEntity
+
   _**Binary Outputs**_ *(KeyValueList, Optional)*
   Outputs to be delivered as Binary
   > **Allows:** String, StringArray, Binary, BinaryArray, KeyValue, KeyValueArray, TCEntity, TCEntityArray, TCEnhancedEntity, TCEnhancedEntityArray
@@ -292,6 +324,9 @@ nested outputs.  Tuple outputs will create nested outputs.
   **Return None on failure** *(Boolean, Default: Selected)*
   When an expression fails to evaluate, assign it the value None, and continue
   execution.
+
+  **Trace subexpression execution** *(Boolean, Default: Unselected)*
+  Trace execution of subexpresssions at DEBUG level in the application's log.
 
 ### Outputs
 
@@ -342,6 +377,10 @@ nested outputs.  Tuple outputs will create nested outputs.
   * `acosh(x)`
 
     Inverse Hyperbolic Cosine
+
+  * `alter(dictionary, key, value)`
+
+    Set a specific key in a dictionary.  Returns the value.
 
   * `asin(x)`
 
@@ -452,6 +491,10 @@ nested outputs.  Tuple outputs will create nested outputs.
 
     Convert X to degrees
 
+  * `dict(**kwargs)`
+
+    Return a dictionary of arguments
+
   * `erf(x)`
 
     Error Function of X
@@ -512,7 +555,7 @@ nested outputs.  Tuple outputs will create nested outputs.
 
     Return floating point value of object
 
-  * `format(s, *args, default=<object object at 0x10edaf7a0>, **kwargs)`
+  * `format(s, *args, default=<object object at 0x1051b09b0>, **kwargs)`
 
     Format string S according to Python string formatting rules.  Compound
     structure elements may be accessed with dot or bracket notation and without quotes
@@ -590,6 +633,12 @@ nested outputs.  Tuple outputs will create nested outputs.
 
     Keys of dictionary
 
+  * `kvlist(dictlist, key='key', value='value')`
+
+    Return a list of dictionaries as a single dictionary with the list
+    item's key value as the key, and the list item's value value as the value.
+    Duplicate keys will promote the value to a list of values.
+
   * `len(container)`
 
     Length of an iterable
@@ -662,6 +711,22 @@ nested outputs.  Tuple outputs will create nested outputs.
 
     Pad iterable to length
 
+  * `partitionedmerge(array1, array2)`
+
+    Merges two arrays of strings to a single array with ordering
+    preserved between partitions in the arrays.  Common lines are partitions
+    subject to the ordering of the partitions being the same in each array.
+
+    For example partitionedmerge(['A', 'a1', 'a2', 'B', 'b1', 'b2', 'D'],
+    ['A', 'a3', 'a4', 'B', 'b3', 'b4', 'C', 'c1', 'c2', 'D'])
+
+    is
+
+    ['A', 'a1', 'a2', 'a3', 'a4', 'B', 'b1', 'b2', 'b3', 'b4', 'C', 'c1', 'c2', 'D']
+
+    The values 'A', 'B', and 'D' act as partition lines for the merge.
+
+
   * `pformat(ob, indent=1, width=80, compact=False)`
 
     Pretty formatter for displaying hierarchial data
@@ -708,6 +773,54 @@ nested outputs.  Tuple outputs will create nested outputs.
 
     Replace chars on S
 
+  * `report(data, columns=None, title=None, header=True, width=None, prolog=None, epilog=None, sort=None, filter=None)`
+
+    Generates a text report of data in columnar format.  Data is either a list of
+    dictionaries, or a list of lists of columnar data.  If a list of lists,
+    then the first row is the header row of the data.
+
+    Columns is a list of row specifiers or a single row specifier, which is a list of
+    column definitions.  If there are multiple row specifiers, each record takes up
+    multiple output rows.
+
+    A row specifier is either an ordered dictionary of name: column specifier or
+    a list of (name, column specifier) tuples.
+
+    A column specifier is width[:height][/option[=value]][/option[=value]]...
+    If rows are lists of lists (e.g. CSV data) and no column specifiers are used, the
+    widths will be automatically calculated.
+
+    Options:
+
+    - align=left|right|center
+
+    - value=format    - format for values e.g. {lineno}.
+    to add a . after lineno
+
+    - error=value     - value to use if the value= format causes an error
+
+    - notrim          - Don't trim leading/trailing space
+
+    - hang=n          - Hanging paragraph by N spaces
+
+    - indent=n        - Indent paragraph by N spaces
+
+    - split=n         - split at n% through the column (default 80)
+    if necessary
+
+    - label=string    - heading label
+
+    - doublenl        - Double newlines (ie, add line after paragraph)
+
+    - nohyphenate     - Don't hyphenate value
+
+    If sort is specified, it is a column or list of columns to sort by, with the column
+    name optionally prefixed with a '-' to do a descending sort.
+
+    If filter is specified, it is an expression that must be true for that record to appear
+    in the result, e.g. filter="salary>70000".
+
+
   * `research(pattern, string, flags='')`
 
     Regular expression search pattern to source
@@ -719,13 +832,13 @@ nested outputs.  Tuple outputs will create nested outputs.
     keyword arguments are made available for indirect pattern substitution, in
     addition to the standard variables.
 
+  * `round(number, digits=0)`
+
+    Round number to digits decimal places
+
   * `rstrip(s, chars=None)`
 
     Strip chars from right of string
-
-  * `set(dictionary, key, value)`
-
-    Set a specfic key in the dictionary.  Returns the value
 
   * `sha1(data)`
 
@@ -817,6 +930,36 @@ nested outputs.  Tuple outputs will create nested outputs.
 
     Uppercase string
 
+  * `url(method, url=None, **kwargs)`
+
+    A direct dispatch of requests.request with an external session.  See
+    https://docs.python-requests.org/en/latest/api for full API details.
+    Returns a Response object, but callable methods on the response are
+    not callable; retrieve the status via the .status_code attribute, or the content
+    via the .content or .text attribute.
+
+    If the URL is not specified, the first argument is assumed to be the URL
+    and the method will default to 'GET'.
+
+    If not specified, a timeout parameter of 30 seconds will be applied.
+    The stream argument will *always* be set to True.
+    The proxies argument will default to the system specified proxies.
+
+    URL requests are throttled to one request every 3 seconds.
+
+    If there is a json result, the json method on the result will
+    be replaced with a json attribute that is the result of the json
+    method, otherwise the json attribute will be set to None.
+
+    Expressions-specific kwargs:
+    rate=request rate per period  (default: 20)
+    period=number of seconds in a period (default: 60)
+    burst=number of requests to burst before throttling (default: 0)
+
+    Only one rate throttle is maintained; switching throttles with multiple
+    url function expressions will not yield intended results.
+
+
   * `urlparse(urlstring, scheme='', allow_fragments=True)`
 
     Parse a URL into a six component named tuple
@@ -866,8 +1009,6 @@ nested outputs.  Tuple outputs will create nested outputs.
     key. If indent is nonzero, an indented XML tree with newlines will
     be generated.  If namespaces are used, the caller must add the
     `xmlns` attributes to an enclosing scope.
-
-
 
 # EBNF-Syntax
 

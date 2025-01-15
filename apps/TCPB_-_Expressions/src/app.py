@@ -38,7 +38,7 @@ class IterTracker(object):
         self.len = ln
 
     def next(self, wrap=True):
-        """ Get a dictionary of the next values of this tracker or None if complete """
+        """Get a dictionary of the next values of this tracker or None if complete"""
 
         self.index += 1
 
@@ -60,9 +60,7 @@ class IterTracker(object):
         if self.index >= self.len:
             return None
 
-        index = self.index
-        if index < 0:
-            index = 0
+        index = max(self.index, 0)
 
         result = {}
         for name in self.names:
@@ -85,6 +83,18 @@ class App(PlaybookApp):
         self.errors = []
         self.loop = None
         self.outloop = {}
+
+        if self.tcex.log.level <= 10 and self.args.trace:
+            self.engine.trace = lambda x: self.tcex.log.debug(x)
+            self.engine.evaluator.trace = self.engine.trace
+
+        # monkeypatch out _wrap_embedded_keyvalue since it can bite us
+
+        def _wrap_embedded_keyvalue(data):
+            """Return data"""
+            return data
+
+        setattr(self.tcex.playbook, '_wrap_embedded_keyvalue', _wrap_embedded_keyvalue)
 
     def handle_exception(self, exception, force_exit=False):
         """handle exception"""
@@ -123,7 +133,7 @@ class App(PlaybookApp):
             self.tcex.playbook.exit(1, str(exception))
 
     def setup_loops(self, varname):
-        """ Read the Key Value Array in, and setup iter_control """
+        """Read the Key Value Array in, and setup iter_control"""
 
         loopvars = tc_argcheck(self.tcex.args, varname, required=True, tcex=self.tcex)
         loopvars = self.tcex.playbook.read(loopvars, array=True, embedded=False)
@@ -172,7 +182,7 @@ class App(PlaybookApp):
         return iter_control
 
     def setup_outputs(self, varname, required=True, output_type='String'):
-        """ Setup output varables from expressions """
+        """Setup output varables from expressions"""
         out_list = tc_argcheck(self.tcex.args, varname, required=required, tcex=self.tcex)
         out_list = self.tcex.playbook.read(out_list, array=True, embedded=False)
 
@@ -318,7 +328,11 @@ class App(PlaybookApp):
         """Evaluate an expression"""
 
         expr = tc_argcheck(self.tcex.args, 'expression', required=True, tcex=self.tcex)
-        self.expression = self.tcex.playbook.read(expr, embedded=True)
+        try:
+            self.expression = self.tcex.playbook.read(expr, embedded=True)
+        except Exception:
+            self.expression = self.tcex.playbook.read(expr, embedded=False)
+
         expr = self.tcex.playbook.read(expr, embedded=False)
         self.tcex.log.info(f'Evaluating expression {expr!r}')
 
@@ -358,6 +372,7 @@ class App(PlaybookApp):
 
         self.setup_vars('variables')
         self.setup_outputs('outputs')
+        self.setup_outputs('stringarray_outputs', required=False, output_type='StringArray')
         self.setup_outputs('binary_outputs', required=False, output_type='Binary')
         self.setup_outputs('binary_array_outputs', required=False, output_type='BinaryArray')
         self.setup_outputs('kv_outputs', required=False, output_type='KeyValue')
@@ -392,6 +407,7 @@ class App(PlaybookApp):
             self.engine.set(key, value)
 
         self.setup_outputs('additional_outputs', required=False)
+        self.setup_outputs('stringarray_outputs', required=False, output_type='StringArray')
         self.setup_outputs('binary_outputs', required=False, output_type='Binary')
         self.setup_outputs('binary_array_outputs', required=False, output_type='BinaryArray')
         self.setup_outputs('kv_outputs', required=False, output_type='KeyValue')
@@ -418,6 +434,21 @@ class App(PlaybookApp):
         if output_type in ('String', 'Binary') and isinstance(value, (dict, list, tuple)):
             value = json.dumps(value, sort_keys=True)
 
+        if output_type == 'String' and not isinstance(value, str):
+            self.tcex.log.debug(f'Coercing output {name} to string from {value!r}')
+            value = str(value)
+
+        if output_type == 'Binary' and isinstance(value, str):
+            value = bytes(value, 'utf-8')
+
+        if output_type == 'BinaryArray':
+            newval = []
+            for item in value:
+                if isinstance(item, str):
+                    item = bytes(value, 'utf-8')
+                newval.append(item)
+            value = newval
+
         self.tcex.log.debug(f'Write: {name}!{output_type}={value!r}')
         try:
             self.tcex.playbook.create_output(name, value, output_type)
@@ -439,7 +470,9 @@ class App(PlaybookApp):
 
         self.tcex.playbook.create_output('expression.action', self.tcex.args.tc_action, 'String')
         if self.expression:
-            self.tcex.playbook.create_output('expression.expression', self.expression, 'String')
+            self.tcex.playbook.create_output(
+                'expression.expression', str(self.expression), 'String'
+            )
         if self.output:
             self.write_one('expression.result.0', self.output[0], 'String')
             self.write_one('expression.result.array', self.output, 'StringArray')

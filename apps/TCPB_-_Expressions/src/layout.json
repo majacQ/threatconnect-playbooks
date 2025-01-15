@@ -47,6 +47,10 @@
       "parameters": [
         {
           "display": "tc_action in ('Evaluate Many', 'Evaluate Many With Loop')",
+          "name": "stringarray_outputs"
+        },
+        {
+          "display": "tc_action in ('Evaluate Many', 'Evaluate Many With Loop')",
           "name": "binary_outputs"
         },
         {
@@ -75,6 +79,9 @@
         },
         {
           "name": "return_none_on_failure"
+        },
+        {
+          "name": "trace"
         }
       ],
       "sequence": 3,

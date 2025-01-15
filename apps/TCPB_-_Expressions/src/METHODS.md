@@ -46,7 +46,7 @@
 
   * `alter(dictionary, key, value)`
 
-    Set a specfic key in a dictionary.  Returns the value.
+    Set a specific key in a dictionary.  Returns the value.
 
   * `asin(x)`
 
@@ -157,6 +157,10 @@
 
     Convert X to degrees
 
+  * `dict(**kwargs)`
+
+    Return a dictionary of arguments
+
   * `erf(x)`
 
     Error Function of X
@@ -217,7 +221,7 @@
 
     Return floating point value of object
 
-  * `format(s, *args, default=<object object at 0x10c7fe7a0>, **kwargs)`
+  * `format(s, *args, default=<object object at 0x1051b09b0>, **kwargs)`
 
     Format string S according to Python string formatting rules.  Compound
     structure elements may be accessed with dot or bracket notation and without quotes
@@ -295,6 +299,12 @@
 
     Keys of dictionary
 
+  * `kvlist(dictlist, key='key', value='value')`
+
+    Return a list of dictionaries as a single dictionary with the list
+    item's key value as the key, and the list item's value value as the value.
+    Duplicate keys will promote the value to a list of values.
+
   * `len(container)`
 
     Length of an iterable
@@ -367,6 +377,22 @@
 
     Pad iterable to length
 
+  * `partitionedmerge(array1, array2)`
+
+    Merges two arrays of strings to a single array with ordering
+    preserved between partitions in the arrays.  Common lines are partitions
+    subject to the ordering of the partitions being the same in each array.
+
+    For example partitionedmerge(['A', 'a1', 'a2', 'B', 'b1', 'b2', 'D'],
+    ['A', 'a3', 'a4', 'B', 'b3', 'b4', 'C', 'c1', 'c2', 'D'])
+
+    is
+
+    ['A', 'a1', 'a2', 'a3', 'a4', 'B', 'b1', 'b2', 'b3', 'b4', 'C', 'c1', 'c2', 'D']
+
+    The values 'A', 'B', and 'D' act as partition lines for the merge.
+
+
   * `pformat(ob, indent=1, width=80, compact=False)`
 
     Pretty formatter for displaying hierarchial data
@@ -413,6 +439,54 @@
 
     Replace chars on S
 
+  * `report(data, columns=None, title=None, header=True, width=None, prolog=None, epilog=None, sort=None, filter=None)`
+
+    Generates a text report of data in columnar format.  Data is either a list of
+    dictionaries, or a list of lists of columnar data.  If a list of lists,
+    then the first row is the header row of the data.
+
+    Columns is a list of row specifiers or a single row specifier, which is a list of
+    column definitions.  If there are multiple row specifiers, each record takes up
+    multiple output rows.
+
+    A row specifier is either an ordered dictionary of name: column specifier or
+    a list of (name, column specifier) tuples.
+
+    A column specifier is width[:height][/option[=value]][/option[=value]]...
+    If rows are lists of lists (e.g. CSV data) and no column specifiers are used, the
+    widths will be automatically calculated.
+
+    Options:
+
+    - align=left|right|center
+
+    - value=format    - format for values e.g. {lineno}.
+    to add a . after lineno
+
+    - error=value     - value to use if the value= format causes an error
+
+    - notrim          - Don't trim leading/trailing space
+
+    - hang=n          - Hanging paragraph by N spaces
+
+    - indent=n        - Indent paragraph by N spaces
+
+    - split=n         - split at n% through the column (default 80)
+    if necessary
+
+    - label=string    - heading label
+
+    - doublenl        - Double newlines (ie, add line after paragraph)
+
+    - nohyphenate     - Don't hyphenate value
+
+    If sort is specified, it is a column or list of columns to sort by, with the column
+    name optionally prefixed with a '-' to do a descending sort.
+
+    If filter is specified, it is an expression that must be true for that record to appear
+    in the result, e.g. filter="salary>70000".
+
+
   * `research(pattern, string, flags='')`
 
     Regular expression search pattern to source
@@ -423,6 +497,10 @@
     if convert is True, values are converted to float or int if possible.  Any other
     keyword arguments are made available for indirect pattern substitution, in
     addition to the standard variables.
+
+  * `round(number, digits=0)`
+
+    Round number to digits decimal places
 
   * `rstrip(s, chars=None)`
 
@@ -517,6 +595,36 @@
   * `upper(s)`
 
     Uppercase string
+
+  * `url(method, url=None, **kwargs)`
+
+    A direct dispatch of requests.request with an external session.  See
+    https://docs.python-requests.org/en/latest/api for full API details.
+    Returns a Response object, but callable methods on the response are
+    not callable; retrieve the status via the .status_code attribute, or the content
+    via the .content or .text attribute.
+
+    If the URL is not specified, the first argument is assumed to be the URL
+    and the method will default to 'GET'.
+
+    If not specified, a timeout parameter of 30 seconds will be applied.
+    The stream argument will *always* be set to True.
+    The proxies argument will default to the system specified proxies.
+
+    URL requests are throttled to one request every 3 seconds.
+
+    If there is a json result, the json method on the result will
+    be replaced with a json attribute that is the result of the json
+    method, otherwise the json attribute will be set to None.
+
+    Expressions-specific kwargs:
+    rate=request rate per period  (default: 20)
+    period=number of seconds in a period (default: 60)
+    burst=number of requests to burst before throttling (default: 0)
+
+    Only one rate throttle is maintained; switching throttles with multiple
+    url function expressions will not yield intended results.
+
 
   * `urlparse(urlstring, scheme='', allow_fragments=True)`
 

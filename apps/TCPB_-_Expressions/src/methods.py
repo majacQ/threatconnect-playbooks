@@ -21,6 +21,8 @@ Attributes defined on the ExpressionMethod class are available
 as constants to the expression handler, *without* the f_ prefix.
 """
 
+# pylint: disable=no-member
+
 import base64
 from collections import OrderedDict, deque
 import csv
@@ -33,7 +35,6 @@ import locale as locale_
 import math
 from pprint import pformat
 import re
-from string import Formatter
 import urllib.parse
 import uuid
 import typing
@@ -42,6 +43,7 @@ from typing import Union, List
 import chardet
 import ioc_fanger
 import jmespath
+import requests
 
 from tcex.utils.date_utils import DatetimeUtils
 
@@ -52,8 +54,11 @@ from literal import literal
 from spamspy.spamsum import spamsum
 from spamspy.edit_dist import edit_dist
 
-from attrdict import AttrDict
+from mergearray import mergearray
+from reporting import Reporting
 from rexxparse import RexxParser
+from smartdict import SmartDict, smart_format
+from throttle import Throttle
 from xml_util import xml_to_dict, dict_to_xml
 
 tzutil = DatetimeUtils()
@@ -61,6 +66,7 @@ tzutil = DatetimeUtils()
 NoneType = type(None)
 
 aliases = ('spammatch', 'spamsum', 'spamdist', 'json')
+THROTTLE_SEC = 3
 
 
 def strbytes(value, annotation):
@@ -166,57 +172,6 @@ def coerce(f):
 
 
 __notfound__ = object()
-
-
-class SmartDict:
-    """Smart dictionary object"""
-
-    def __init__(self, namespace, d=None, default=__notfound__):
-        """init"""
-        self.namespace = namespace
-        if not d:
-            d = {}
-        self.values = d
-        self.default = default
-
-    def __getitem__(self, name, default=__notfound__):
-        """ get item from values *or* namespace """
-
-        if default is __notfound__:
-            default = self.default
-
-        if name in self.values:
-            value = self.values[name]
-        else:
-            value = self.namespace.get(name, __notfound__)
-
-        if value is __notfound__:
-            value = getattr(self.namespace, name, __notfound__)
-
-        if value is __notfound__:
-            value = default
-
-        if value is __notfound__:
-            raise KeyError(name)
-
-        return self.encapsulate(value)
-
-    get = __getitem__
-    __getattr__ = __getitem__
-
-    def encapsulate(self, value):
-        """Encapsulate dicts into AttrDicts"""
-
-        if not isinstance(value, (list, tuple, dict)):
-            return value
-
-        if isinstance(value, (list, tuple)):
-            result = [self.encapsulate(x) for x in value]
-            if isinstance(value, tuple):
-                result = tuple(result)
-            return result
-
-        return AttrDict(value)
 
 
 class ExpressionMethods:
@@ -527,6 +482,16 @@ class ExpressionMethods:
 
         return math.degrees(x)
 
+    @staticmethod
+    def f_dict(**kwargs):
+        """Return a dictionary of arguments"""
+        d = OrderedDict()
+        # kwarg keys can be tokens from the lexer
+        for key, value in kwargs.items():
+            d[str(key)] = value
+
+        return d
+
     @coerce
     @staticmethod
     def f_erf(x: Union[int, float]):
@@ -544,7 +509,7 @@ class ExpressionMethods:
     @coerce
     @staticmethod
     def f_exp(x: Union[int, float]):
-        """Math Exp of X """
+        """Math Exp of X"""
 
         return math.exp(x)
 
@@ -796,10 +761,7 @@ class ExpressionMethods:
         or `blob[0].events[0].source.device.ipAddress`.  If default is set,
         that value will be used for any missing value."""
 
-        kws = SmartDict(self, kwargs, default=default)
-        fmt = Formatter()
-
-        return fmt.vformat(s, args, kws)
+        return smart_format(s, *args, _default=default, _context=self, **kwargs)
 
     @staticmethod
     def f_fuzzydist(hash1, hash2):
@@ -981,6 +943,41 @@ class ExpressionMethods:
         """Keys of dictionary"""
 
         return list(ob.keys())
+
+    @staticmethod
+    def f_kvlist(dictlist: List[dict], key='key', value='value'):
+        """Return a list of dictionaries as a single dictionary with the list
+        item's key value as the key, and the list item's value value as the value.
+        Duplicate keys will promote the value to a list of values."""
+
+        result = {}
+        duplicates = set()
+
+        if not dictlist:
+            return result
+
+        if not isinstance(dictlist, (list, tuple)):
+            raise TypeError('dictlist must be a list or tuple of dictionaries')
+
+        for item in dictlist:
+            if not isinstance(item, dict):
+                raise TypeError('dictlist must only contain dictionaries')
+
+            key_value = item.get(key, None)
+            value_value = item.get(value, None)
+
+            if key_value not in result:
+                result[key_value] = value_value
+            else:
+                if key_value not in duplicates:
+                    existing_value = [result[key_value]]
+                    duplicates.add(key_value)
+                else:
+                    existing_value = result[key_value]
+                existing_value.append(value_value)
+                result[key_value] = existing_value
+
+        return result
 
     @staticmethod
     def f_len(container):
@@ -1165,6 +1162,24 @@ class ExpressionMethods:
         return result
 
     @staticmethod
+    def f_partitionedmerge(array1, array2):
+        """Merges two arrays of strings to a single array with ordering
+        preserved between partitions in the arrays.  Common lines are partitions
+        subject to the ordering of the partitions being the same in each array.
+
+        For example partitionedmerge(['A', 'a1', 'a2', 'B', 'b1', 'b2', 'D'],
+        ['A', 'a3', 'a4', 'B', 'b3', 'b4', 'C', 'c1', 'c2', 'D'])
+
+        is
+
+        ['A', 'a1', 'a2', 'a3', 'a4', 'B', 'b1', 'b2', 'b3', 'b4', 'C', 'c1', 'c2', 'D']
+
+        The values 'A', 'B', and 'D' act as partition lines for the merge.
+        """
+
+        return mergearray(array1, array2)
+
+    @staticmethod
     def f_pivot(list_of_lists, pad=None):
         """Pivots a list of lists, such that item[x][y] becomes item[y][x].
         If the inner lists are not of even length, they will be padded with
@@ -1315,6 +1330,77 @@ class ExpressionMethods:
 
         return s.replace(source, target)
 
+    def f_report(
+        self,
+        data: list,
+        columns: list = None,
+        title=None,
+        header=True,
+        width=None,
+        prolog=None,
+        epilog=None,
+        sort=None,
+        filter=None,  # pylint: disable=redefined-builtin
+    ):
+        """Generates a text report of data in columnar format.  Data is either a list of
+        dictionaries, or a list of lists of columnar data.  If a list of lists,
+        then the first row is the header row of the data.
+
+        Columns is a list of row specifiers or a single row specifier, which is a list of
+        column definitions.  If there are multiple row specifiers, each record takes up
+        multiple output rows.
+
+        A row specifier is either an ordered dictionary of name: column specifier or
+        a list of (name, column specifier) tuples.
+
+        A column specifier is width[:height][/option[=value]][/option[=value]]...
+        If rows are lists of lists (e.g. CSV data) and no column specifiers are used, the
+        widths will be automatically calculated.
+
+        Options:
+
+            - align=left|right|center
+
+            - value=format    - format for values e.g. {lineno}.
+                                to add a . after lineno
+
+            - error=value     - value to use if the value= format causes an error
+
+            - notrim          - Don't trim leading/trailing space
+
+            - hang=n          - Hanging paragraph by N spaces
+
+            - indent=n        - Indent paragraph by N spaces
+
+            - split=n         - split at n% through the column (default 80)
+                                if necessary
+
+            - label=string    - heading label
+
+            - doublenl        - Double newlines (ie, add line after paragraph)
+
+            - nohyphenate     - Don't hyphenate value
+
+        If sort is specified, it is a column or list of columns to sort by, with the column
+        name optionally prefixed with a '-' to do a descending sort.
+
+        If filter is specified, it is an expression that must be true for that record to appear
+        in the result, e.g. filter="salary>70000".
+        """
+
+        reporting = Reporting(self)
+        return reporting.create_report(
+            data,
+            columns=columns,
+            title=title,
+            header=header,
+            width=width,
+            prolog=prolog,
+            epilog=epilog,
+            sort=sort,
+            filter=filter,
+        )
+
     @staticmethod
     def f_research(pattern, string, flags=''):
         """Regular expression search pattern to source"""
@@ -1360,6 +1446,13 @@ class ExpressionMethods:
 
                 result[key] = value
         return result
+
+    @coerce
+    @staticmethod
+    def f_round(number: Union[int, float], digits: int = 0):
+        """Round number to digits decimal places"""
+
+        return round(number, digits)
 
     @coerce
     @staticmethod
@@ -1591,6 +1684,83 @@ class ExpressionMethods:
                 queue.extendleft(insertions)
             else:
                 result.append(item)
+
+        return result
+
+    def f_url(self, method, url=None, **kwargs):
+        """A direct dispatch of requests.request with an external session.  See
+        https://docs.python-requests.org/en/latest/api for full API details.
+        Returns a Response object, but callable methods on the response are
+        not callable; retrieve the status via the .status_code attribute, or the content
+        via the .content or .text attribute.
+
+        If the URL is not specified, the first argument is assumed to be the URL
+        and the method will default to 'GET'.
+
+        If not specified, a timeout parameter of 30 seconds will be applied.
+        The stream argument will *always* be set to True.
+        The proxies argument will default to the system specified proxies.
+
+        URL requests are throttled to one request every 3 seconds.
+
+        If there is a json result, the json method on the result will
+        be replaced with a json attribute that is the result of the json
+        method, otherwise the json attribute will be set to None.
+
+        Expressions-specific kwargs:
+            rate=request rate per period  (default: 20)
+            period=number of seconds in a period (default: 60)
+            burst=number of requests to burst before throttling (default: 0)
+
+        Only one rate throttle is maintained; switching throttles with multiple
+        url function expressions will not yield intended results.
+        """
+
+        if url is None:
+            url = method
+            method = 'GET'
+
+        if self.tcex:
+            session = self.tcex.session_external
+        else:
+            session = getattr(self, 'session', None)
+
+        if session is None:
+            session = requests.Session()
+            setattr(self, 'session', session)
+
+        if 'timeout' not in kwargs:
+            kwargs['timeout'] = 30
+
+        kwargs['stream'] = False
+
+        rate = kwargs.pop('rate', 20)
+        period = kwargs.pop('period', 60)
+        burst = kwargs.pop('burst', 0)
+        throttle = getattr(self, 'throttle', None)
+
+        if throttle is None:
+            throttle = Throttle(rate, period, burst)
+            setattr(self, 'throttle', throttle)
+
+        if throttle.rate != rate or throttle.period != period or throttle.burst != burst:
+            throttle()  # run the old throttle to run it out
+            throttle = Throttle(rate, period, burst)
+            setattr(self, 'throttle', throttle)
+
+        throttle()
+
+        if self.tcex:
+            self.tcex.log.debug(f'URL: {method} {url} {kwargs}')
+        result = session.request(method, url, **kwargs)
+        if self.tcex:
+            self.tcex.log.debug(f'URL result: {result}')
+
+        try:
+            json_data = result.json()
+            setattr(result, 'json', json_data)
+        except Exception:
+            setattr(result, 'json', None)
 
         return result
 
